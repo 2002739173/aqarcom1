@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>عقاركم — لوحة التحكم</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&display=swap" rel="stylesheet" />
+  <link rel="icon" href="data:," />
+  <link rel="stylesheet" href="css/dashboard.css" />
+</head>
+<body>
+  <!-- ============ Login ============ -->
+  <section id="login-view" class="login" hidden>
+    <div class="login-card">
+      <div class="brand brand--lg">
+        <span class="brand-mark">ع</span>
+        <div>
+          <div class="brand-name">عقاركم</div>
+          <div class="brand-sub">لوحة تحكم الإدارة</div>
+        </div>
+      </div>
+      <form id="login-form" class="form" autocomplete="on">
+        <label class="field">
+          <span>البريد الإلكتروني</span>
+          <input type="email" name="email" required autocomplete="username" dir="ltr" placeholder="admin@aqarcom.app" />
+        </label>
+        <label class="field">
+          <span>كلمة المرور</span>
+          <input type="password" name="password" required autocomplete="current-password" dir="ltr" />
+        </label>
+        <p class="form-error" id="login-error" role="alert"></p>
+        <button class="btn btn--primary btn--block" type="submit">تسجيل الدخول</button>
+        <p class="muted small">الدخول مقصور على حسابات مدير النظام.</p>
+      </form>
+    </div>
+  </section>
+
+  <!-- ============ App shell ============ -->
+  <div id="app-view" class="shell" hidden>
+    <aside class="sidebar" id="sidebar">
+      <div class="brand">
+        <span class="brand-mark">ع</span>
+        <div>
+          <div class="brand-name">عقاركم</div>
+          <div class="brand-sub">لوحة التحكم</div>
+        </div>
+      </div>
+      <nav class="nav" id="nav">
+        <a href="#/overview" data-route="overview"><span class="nav-ico">▦</span>نظرة عامة</a>
+        <a href="#/approvals" data-route="approvals"><span class="nav-ico">✓</span>طلبات التفعيل<b class="nav-badge" id="badge-approvals" hidden></b></a>
+        <a href="#/users" data-route="users"><span class="nav-ico">☰</span>المستخدمون</a>
+        <a href="#/verifications" data-route="verifications"><span class="nav-ico">⎘</span>التوثيق الهندسي<b class="nav-badge" id="badge-verifications" hidden></b></a>
+        <a href="#/properties" data-route="properties"><span class="nav-ico">⌂</span>الإعلانات العقارية</a>
+        <a href="#/tenders" data-route="tenders"><span class="nav-ico">⚖</span>المناقصات</a>
+      </nav>
+      <div class="sidebar-foot">
+        <div class="me" id="me"></div>
+        <button class="btn btn--ghost btn--block" id="logout-btn" type="button">تسجيل الخروج</button>
+      </div>
+    </aside>
+
+    <div class="main">
+      <header class="topbar">
+        <button class="icon-btn menu-btn" id="menu-btn" type="button" aria-label="القائمة">☰</button>
+        <h1 id="page-title">نظرة عامة</h1>
+        <div class="topbar-end">
+          <span class="muted small" id="server-time"></span>
+          <button class="icon-btn" id="refresh-btn" type="button" title="تحديث">⟳</button>
+        </div>
+      </header>
+      <main id="page" class="page" tabindex="-1"></main>
+    </div>
+  </div>
+
+  <!-- ============ Overlays ============ -->
+  <div class="drawer-backdrop" id="drawer-backdrop" hidden></div>
+  <aside class="drawer" id="drawer" hidden aria-modal="true" role="dialog">
+    <div class="drawer-head">
+      <h2 id="drawer-title"></h2>
+      <button class="icon-btn" data-close-drawer type="button" aria-label="إغلاق">✕</button>
+    </div>
+    <div class="drawer-body" id="drawer-body"></div>
+  </aside>
+
+  <div class="modal-backdrop" id="modal" hidden>
+    <div class="modal" role="dialog" aria-modal="true">
+      <h3 id="modal-title"></h3>
+      <p id="modal-text" class="muted"></p>
+      <div id="modal-extra"></div>
+      <label class="field" id="modal-reason-wrap">
+        <span id="modal-reason-label">السبب</span>
+        <textarea id="modal-reason" rows="3"></textarea>
+      </label>
+      <p class="form-error" id="modal-error"></p>
+      <div class="modal-actions">
+        <button class="btn btn--ghost" id="modal-cancel" type="button">إلغاء</button>
+        <button class="btn btn--primary" id="modal-ok" type="button">تأكيد</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toasts" id="toasts" aria-live="polite"></div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

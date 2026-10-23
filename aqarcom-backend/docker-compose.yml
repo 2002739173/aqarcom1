@@ -1,0 +1,31 @@
+# One command to run the whole backend:  docker compose up -d --build
+# Then seed demo data:                    docker compose exec api npm run seed
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    ports: ["27017:27017"]
+    volumes: [mongo-data:/data/db]
+
+  scoring:
+    build: ./scoring-service
+    restart: unless-stopped
+    environment:
+      SCORING_API_KEY: ${SCORING_API_KEY:-internal-scoring-key}
+    # no "ports": the scoring service is reachable only on the internal network (CN-04)
+
+  api:
+    build: ./server
+    restart: unless-stopped
+    depends_on: [mongo, scoring]
+    env_file: ./server/.env
+    environment:
+      MONGO_URI: mongodb://mongo:27017/aqarcom
+      SCORING_SERVICE_URL: http://scoring:8001
+      STORAGE_DIR: /srv/storage
+    ports: ["3000:3000"]
+    volumes: [api-storage:/srv/storage]
+
+volumes:
+  mongo-data:
+  api-storage:

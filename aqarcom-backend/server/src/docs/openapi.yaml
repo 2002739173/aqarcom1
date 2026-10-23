@@ -1,0 +1,837 @@
+openapi: 3.0.3
+info:
+  title: AqarCom (عقاركم) API
+  version: 1.0.0
+  description: |
+    REST API of the AqarCom platform — real-estate marketplace (B2C) + tenders & contracting (B2B).
+
+    **Envelope.** Every JSON response is either
+    `{ "success": true, "data": ..., "meta": {...}? }` or
+    `{ "success": false, "error": { "code": "STABLE_CODE", "message": "رسالة عربية", "details": {...}? } }`.
+
+    **Auth.** Send `Authorization: Bearer <accessToken>`. Expired/invalid token → **401** (`TOKEN_EXPIRED` → call `/auth/refresh`).
+    Insufficient role → **403**.
+
+    **Time.** All dates are ISO-8601 UTC. The server clock is the only authority for deadlines (BR-11); `GET /meta` returns `serverTime`.
+servers:
+  - url: http://localhost:3000/api/v1
+    description: Local
+  - url: http://10.0.2.2:3000/api/v1
+    description: From the Android emulator
+tags:
+  - name: Auth
+    description: FR-01 → FR-04
+  - name: Properties
+    description: FR-05 → FR-09, FR-25
+  - name: Tenders
+    description: FR-10 → FR-21
+  - name: Bids
+    description: FR-12, FR-13, FR-16
+  - name: Uploads
+    description: Resumable chunked upload (NFR-01)
+  - name: Verification
+    description: FR-22 → FR-24
+  - name: Notifications
+    description: FR-21, FR-26 (in-app store + FCM push)
+  - name: Admin
+    description: FR-24, FR-27, FR-28
+  - name: Meta
+
+components:
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    id:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, example: 66f1c2a9e4b0a1b2c3d4e5f6 }
+    page:
+      name: page
+      in: query
+      schema: { type: integer, minimum: 1, default: 1 }
+    limit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+  responses:
+    Error:
+      description: Error
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example:
+            success: false
+            error: { code: VALIDATION_ERROR, message: 'بيانات غير صالحة: phone', details: { fields: [{ field: phone, message: 'رقم الهاتف غير صالح' }] } }
+  schemas:
+    Error:
+      type: object
+      properties:
+        success: { type: boolean, example: false }
+        error:
+          type: object
+          properties:
+            code: { type: string, example: TENDER_CLOSED }
+            message: { type: string, example: 'انتهى موعد إغلاق المناقصة حسب توقيت الخادم' }
+            details: { type: object }
+    PageMeta:
+      type: object
+      properties:
+        page: { type: integer, example: 1 }
+        limit: { type: integer, example: 20 }
+        total: { type: integer, example: 57 }
+        totalPages: { type: integer, example: 3 }
+    User:
+      type: object
+      properties:
+        id: { type: string }
+        fullName: { type: string, example: 'سامر الباحث' }
+        email: { type: string, example: user@aqarcom.app }
+        phone: { type: string, example: '+963944123456' }
+        whatsapp: { type: string }
+        role: { type: string, enum: [user, property_owner, project_owner, contractor, admin] }
+        verificationStatus: { type: string, enum: [none, pending, verified, rejected] }
+        companyName: { type: string }
+        city: { type: string }
+        status: { type: string, enum: [pending, active, rejected, suspended], description: 'pending = waiting for admin approval on the dashboard; every privileged call returns 403 ACCOUNT_PENDING_APPROVAL' }
+        createdAt: { type: string, format: date-time }
+    AuthResult:
+      type: object
+      properties:
+        user: { $ref: '#/components/schemas/User' }
+        accessToken: { type: string }
+        refreshToken: { type: string }
+        tokenType: { type: string, example: Bearer }
+        expiresIn: { type: integer, example: 3600, description: seconds }
+        refreshExpiresAt: { type: string, format: date-time }
+    RegisterRequest:
+      type: object
+      required: [fullName, email, phone, password, role]
+      properties:
+        fullName: { type: string, example: 'أحمد الحمصي' }
+        email: { type: string, example: ahmad@example.com }
+        phone: { type: string, example: '+963944123456' }
+        whatsapp: { type: string }
+        password: { type: string, example: Passw0rd!, description: '≥ 8 chars, letters and digits' }
+        role: { type: string, enum: [user, property_owner, project_owner, contractor] }
+        companyName: { type: string, description: required for contractor }
+        city: { type: string }
+    Image:
+      type: object
+      properties:
+        id: { type: string }
+        url: { type: string, example: 'http://10.0.2.2:3000/files/property-images/1700-abc.jpg' }
+    Property:
+      type: object
+      properties:
+        id: { type: string }
+        title: { type: string, example: 'شقة مفروشة في المالكي' }
+        description: { type: string }
+        propertyType: { type: string, enum: [apartment, house, villa, land, shop, office, building, farm, warehouse] }
+        purpose: { type: string, enum: [sale, rent, investment] }
+        price: { type: number, example: 450 }
+        currency: { type: string, enum: [SYP, USD] }
+        area: { type: number, example: 140 }
+        rooms: { type: integer, example: 3 }
+        bathrooms: { type: integer }
+        floor: { type: integer }
+        city: { type: string, example: 'دمشق' }
+        district: { type: string }
+        address: { type: string }
+        latitude: { type: number, example: 33.5205 }
+        longitude: { type: number, example: 36.2803 }
+        images: { type: array, items: { $ref: '#/components/schemas/Image' } }
+        thumbnailUrl: { type: string, nullable: true }
+        status: { type: string, enum: [active, hidden, deleted] }
+        owner:
+          type: object
+          description: phone / whatsapp present only for signed-in viewers (BR-05)
+          properties:
+            id: { type: string }
+            fullName: { type: string }
+            phone: { type: string }
+            whatsapp: { type: string }
+        contactLocked: { type: boolean, description: true for visitors → disable call / WhatsApp buttons }
+        isFavorite: { type: boolean }
+        isMine: { type: boolean }
+        distanceMeters: { type: integer, description: only when sort=nearest }
+        viewsCount: { type: integer }
+        createdAt: { type: string, format: date-time }
+    PropertyInput:
+      type: object
+      required: [title, propertyType, purpose, price, area, city, latitude, longitude]
+      properties:
+        title: { type: string }
+        description: { type: string }
+        propertyType: { type: string, enum: [apartment, house, villa, land, shop, office, building, farm, warehouse] }
+        purpose: { type: string, enum: [sale, rent, investment] }
+        price: { type: number }
+        currency: { type: string, enum: [SYP, USD], default: USD }
+        area: { type: number }
+        rooms: { type: integer }
+        bathrooms: { type: integer }
+        floor: { type: integer }
+        city: { type: string }
+        district: { type: string }
+        address: { type: string }
+        latitude: { type: number }
+        longitude: { type: number }
+      example:
+        title: 'شقة مفروشة في المالكي'
+        propertyType: apartment
+        purpose: rent
+        price: 450
+        currency: USD
+        area: 140
+        rooms: 3
+        city: 'دمشق'
+        latitude: 33.5205
+        longitude: 36.2803
+    MapPin:
+      type: object
+      properties:
+        id: { type: string }
+        title: { type: string }
+        price: { type: number }
+        currency: { type: string }
+        purpose: { type: string }
+        propertyType: { type: string }
+        latitude: { type: number }
+        longitude: { type: number }
+        thumbnailUrl: { type: string, nullable: true }
+    ContactInfo:
+      type: object
+      properties:
+        ownerName: { type: string }
+        phone: { type: string }
+        whatsapp: { type: string }
+        telUri: { type: string, example: 'tel:+963933111222' }
+        whatsappUrl: { type: string, example: 'https://wa.me/963933111222?text=...' }
+    Tender:
+      type: object
+      properties:
+        id: { type: string }
+        title: { type: string }
+        description: { type: string }
+        tenderType: { type: string, enum: [construction, finishing, partnership] }
+        city: { type: string }
+        address: { type: string }
+        latitude: { type: number }
+        longitude: { type: number }
+        estimatedBudget: { type: number }
+        priceWeight: { type: integer, example: 60 }
+        durationWeight: { type: integer, example: 40 }
+        deadline: { type: string, format: date-time }
+        originalDeadline: { type: string, format: date-time }
+        extensionUsed: { type: boolean }
+        status: { type: string, enum: [draft, open, evaluating, shortlist_ready, awarded, closed_no_bids, cancelled] }
+        publishedAt: { type: string, format: date-time }
+        closedAt: { type: string, format: date-time }
+        evaluation:
+          type: object
+          properties:
+            engine: { type: string, enum: [wsm, fallback] }
+            evaluatedAt: { type: string, format: date-time }
+            bidsConsidered: { type: integer }
+        awardedBid: { type: string }
+        currentDocumentVersion: { type: integer }
+        currentDocument: { $ref: '#/components/schemas/TenderDocument' }
+        activeBidsCount: { type: integer, description: owner / admin only }
+        owner: { type: object, properties: { id: { type: string }, fullName: { type: string }, companyName: { type: string } } }
+        serverTime: { type: string, format: date-time }
+        secondsRemaining: { type: integer, description: 'computed from server clock — use for the countdown' }
+        isMine: { type: boolean }
+        myBid: { $ref: '#/components/schemas/Bid' }
+        canBid: { type: boolean, description: contractor only }
+    TenderInput:
+      type: object
+      required: [title, tenderType, priceWeight, durationWeight, deadline]
+      properties:
+        title: { type: string }
+        description: { type: string }
+        tenderType: { type: string, enum: [construction, finishing, partnership] }
+        city: { type: string }
+        address: { type: string }
+        latitude: { type: number }
+        longitude: { type: number }
+        property: { type: string, description: optional link to a property id }
+        estimatedBudget: { type: number }
+        priceWeight: { type: integer, minimum: 0, maximum: 100 }
+        durationWeight: { type: integer, minimum: 0, maximum: 100, description: 'priceWeight + durationWeight = 100 (BR-07)' }
+        deadline: { type: string, format: date-time }
+      example:
+        title: 'إكساء بناء سكني في المزة'
+        tenderType: finishing
+        city: 'دمشق'
+        priceWeight: 60
+        durationWeight: 40
+        deadline: '2026-11-30T12:00:00Z'
+    TenderDocument:
+      type: object
+      properties:
+        id: { type: string }
+        tender: { type: string }
+        version: { type: integer, example: 2 }
+        originalName: { type: string }
+        mimeType: { type: string }
+        sizeBytes: { type: integer }
+        sizeMb: { type: number }
+        note: { type: string }
+        createdAt: { type: string, format: date-time }
+    Bid:
+      type: object
+      properties:
+        id: { type: string }
+        tender: { type: string }
+        contractor: { type: string }
+        totalPrice: { type: number, example: 80000 }
+        durationDays: { type: integer, example: 150 }
+        notes: { type: string }
+        submittedAt: { type: string, format: date-time }
+        isWithdrawn: { type: boolean }
+        withdrawnAt: { type: string, format: date-time }
+        outcome: { type: string, enum: [pending, won, lost] }
+    BidInput:
+      type: object
+      required: [totalPrice, durationDays]
+      properties:
+        totalPrice: { type: number, exclusiveMinimum: true, minimum: 0 }
+        durationDays: { type: integer, minimum: 1 }
+        notes: { type: string }
+      example: { totalPrice: 80000, durationDays: 150, notes: 'يشمل المواد' }
+    Shortlist:
+      type: object
+      properties:
+        tenderId: { type: string }
+        status: { type: string }
+        engine: { type: string, enum: [wsm, fallback] }
+        evaluatedAt: { type: string, format: date-time }
+        bidsConsidered: { type: integer }
+        weights: { type: object, properties: { price: { type: integer }, duration: { type: integer } } }
+        awardedBidId: { type: string, nullable: true }
+        results:
+          type: array
+          items:
+            type: object
+            properties:
+              rank: { type: integer, example: 1 }
+              bidId: { type: string }
+              score: { type: number, example: 0.84 }
+              scorePercent: { type: number, example: 84 }
+              normalizedPrice: { type: number }
+              normalizedDuration: { type: number }
+              totalPrice: { type: number }
+              durationDays: { type: integer }
+              engine: { type: string }
+              submittedAt: { type: string, format: date-time }
+              contractor: { type: object, properties: { id: { type: string }, fullName: { type: string }, companyName: { type: string }, phone: { type: string }, email: { type: string } } }
+    UploadSession:
+      type: object
+      properties:
+        id: { type: string }
+        fileName: { type: string }
+        mimeType: { type: string }
+        totalSize: { type: integer }
+        chunkSize: { type: integer }
+        totalChunks: { type: integer }
+        receivedChunks: { type: array, items: { type: integer } }
+        missingChunks: { type: array, items: { type: integer } }
+        complete: { type: boolean }
+    VerificationRequest:
+      type: object
+      properties:
+        id: { type: string }
+        contractor: { type: string }
+        documents:
+          type: array
+          items: { type: object, properties: { id: { type: string }, docType: { type: string, enum: [engineers_syndicate, commercial_register, other] }, originalName: { type: string }, mimeType: { type: string }, sizeBytes: { type: integer } } }
+        status: { type: string, enum: [pending, approved, rejected] }
+        reviewedBy: { type: string }
+        reviewedAt: { type: string, format: date-time }
+        rejectionReason: { type: string }
+        createdAt: { type: string, format: date-time }
+    Notification:
+      type: object
+      properties:
+        id: { type: string }
+        type:
+          type: string
+          enum: [new_bid, bid_won, bid_lost, tender_closed_no_bids, shortlist_ready, tender_document_updated, tender_extended, tender_cancelled, verification_approved, verification_rejected, content_hidden, content_deleted, content_restored, account_locked]
+        title: { type: string }
+        body: { type: string }
+        data: { type: object, example: { tenderId: 66f1c2a9e4b0a1b2c3d4e5f6 } }
+        readAt: { type: string, format: date-time, nullable: true }
+        createdAt: { type: string, format: date-time }
+    ModerateRequest:
+      type: object
+      required: [action, reason]
+      properties:
+        action: { type: string, enum: [hide, delete, restore] }
+        reason: { type: string, example: 'محتوى مخالف لشروط النشر' }
+
+security:
+  - bearer: []
+
+paths:
+  /meta:
+    get:
+      tags: [Meta]
+      security: []
+      summary: Enumerations, limits and server time
+      responses: { '200': { description: OK } }
+
+  /auth/register:
+    post:
+      tags: [Auth]
+      security: []
+      summary: Create account with one of four roles (FR-01)
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/RegisterRequest' } } } }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { type: object, properties: { success: { type: boolean }, data: { $ref: '#/components/schemas/AuthResult' } } } } } }
+        '400': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+  /auth/login:
+    post:
+      tags: [Auth]
+      security: []
+      summary: Login → JWT (FR-01). 5 failures → 15 min lock, 423 (FR-04)
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [email, password], properties: { email: { type: string }, password: { type: string } } }, example: { email: user@aqarcom.app, password: Passw0rd! } } } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: object, properties: { success: { type: boolean }, data: { $ref: '#/components/schemas/AuthResult' } } } } } }
+        '401': { description: 'INVALID_CREDENTIALS (deliberately generic)' }
+        '423': { description: 'ACCOUNT_LOCKED — details.retryAfterSeconds' }
+  /auth/refresh:
+    post:
+      tags: [Auth]
+      security: []
+      summary: Exchange a refresh token for new tokens (single-use rotation)
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { refreshToken: { type: string } } } } } }
+      responses: { '200': { description: OK }, '401': { description: REFRESH_INVALID } }
+  /auth/logout:
+    post:
+      tags: [Auth]
+      security: []
+      summary: Revoke a refresh token
+      requestBody: { content: { application/json: { schema: { type: object, properties: { refreshToken: { type: string } } } } } }
+      responses: { '200': { description: OK } }
+  /auth/forgot-password:
+    post:
+      tags: [Auth]
+      security: []
+      summary: Send a 6-digit one-time code by email (FR-03)
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { email: { type: string } } } } } }
+      responses: { '200': { description: Same response whether the email exists or not } }
+  /auth/reset-password:
+    post:
+      tags: [Auth]
+      security: []
+      summary: Set a new password using the one-time code (FR-03)
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { email: { type: string }, code: { type: string, example: '482913' }, newPassword: { type: string } } } } } }
+      responses: { '200': { description: OK }, '400': { description: RESET_CODE_INVALID } }
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: Current user
+      responses: { '200': { description: OK, content: { application/json: { schema: { type: object, properties: { data: { $ref: '#/components/schemas/User' } } } } } } }
+    patch:
+      tags: [Auth]
+      summary: Update profile
+      requestBody: { content: { application/json: { schema: { type: object, properties: { fullName: { type: string }, phone: { type: string }, whatsapp: { type: string }, companyName: { type: string }, city: { type: string } } } } } }
+      responses: { '200': { description: OK } }
+  /auth/change-password:
+    post:
+      tags: [Auth]
+      summary: Change password (revokes all refresh tokens)
+      requestBody: { content: { application/json: { schema: { type: object, properties: { currentPassword: { type: string }, newPassword: { type: string } } } } } }
+      responses: { '200': { description: OK } }
+  /auth/device-token:
+    post:
+      tags: [Auth]
+      summary: Register the FCM device token for push notifications
+      requestBody: { content: { application/json: { schema: { type: object, properties: { token: { type: string }, platform: { type: string, example: android } } } } } }
+      responses: { '200': { description: OK } }
+    delete:
+      tags: [Auth]
+      summary: Remove an FCM token (on logout)
+      requestBody: { content: { application/json: { schema: { type: object, properties: { token: { type: string } } } } } }
+      responses: { '200': { description: OK } }
+
+  /properties:
+    get:
+      tags: [Properties]
+      security: [{}, { bearer: [] }]
+      summary: Search & filter listings (FR-08). Visitors allowed.
+      parameters:
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/limit'
+        - { name: q, in: query, schema: { type: string } }
+        - { name: city, in: query, schema: { type: string } }
+        - { name: district, in: query, schema: { type: string } }
+        - { name: propertyType, in: query, schema: { type: string } }
+        - { name: purpose, in: query, schema: { type: string, enum: [sale, rent, investment] } }
+        - { name: currency, in: query, schema: { type: string } }
+        - { name: minPrice, in: query, schema: { type: number } }
+        - { name: maxPrice, in: query, schema: { type: number } }
+        - { name: minArea, in: query, schema: { type: number } }
+        - { name: maxArea, in: query, schema: { type: number } }
+        - { name: minRooms, in: query, schema: { type: integer } }
+        - { name: maxRooms, in: query, schema: { type: integer } }
+        - { name: sort, in: query, schema: { type: string, enum: [newest, price_asc, price_desc, nearest], default: newest } }
+        - { name: latitude, in: query, description: required for sort=nearest, schema: { type: number } }
+        - { name: longitude, in: query, schema: { type: number } }
+        - { name: radiusKm, in: query, schema: { type: number } }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/Property' } }, meta: { $ref: '#/components/schemas/PageMeta' } } } } } }
+    post:
+      tags: [Properties]
+      summary: Publish a listing (property_owner) — location mandatory (FR-05, BR-04)
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/PropertyInput' } } } }
+      responses: { '201': { description: Created }, '400': { $ref: '#/components/responses/Error' }, '403': { description: Wrong role } }
+  /properties/map:
+    get:
+      tags: [Properties]
+      security: [{}, { bearer: [] }]
+      summary: Pins inside the visible map bounds (FR-07)
+      parameters:
+        - { name: swLat, in: query, required: true, schema: { type: number } }
+        - { name: swLng, in: query, required: true, schema: { type: number } }
+        - { name: neLat, in: query, required: true, schema: { type: number } }
+        - { name: neLng, in: query, required: true, schema: { type: number } }
+        - { name: propertyType, in: query, schema: { type: string } }
+        - { name: purpose, in: query, schema: { type: string } }
+        - { name: minPrice, in: query, schema: { type: number } }
+        - { name: maxPrice, in: query, schema: { type: number } }
+        - { name: limit, in: query, schema: { type: integer, maximum: 500 } }
+      responses: { '200': { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/MapPin' } } } } } } } }
+  /properties/mine:
+    get:
+      tags: [Properties]
+      summary: My listings (property_owner)
+      parameters: [{ $ref: '#/components/parameters/page' }, { $ref: '#/components/parameters/limit' }, { name: status, in: query, schema: { type: string, enum: [active, hidden] } }]
+      responses: { '200': { description: OK } }
+  /properties/favorites:
+    get:
+      tags: [Properties]
+      summary: My wishlist (FR-09)
+      parameters: [{ $ref: '#/components/parameters/page' }, { $ref: '#/components/parameters/limit' }]
+      responses: { '200': { description: OK } }
+  /properties/{id}:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    get:
+      tags: [Properties]
+      security: [{}, { bearer: [] }]
+      summary: Listing details (owner phone hidden for visitors — TC-09)
+      responses: { '200': { description: OK, content: { application/json: { schema: { type: object, properties: { data: { $ref: '#/components/schemas/Property' } } } } } }, '404': { description: Not found / hidden } }
+    patch:
+      tags: [Properties]
+      summary: Edit (owner or admin only — BR-03)
+      requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/PropertyInput' } } } }
+      responses: { '200': { description: OK }, '403': { description: NOT_PROPERTY_OWNER } }
+    delete:
+      tags: [Properties]
+      summary: Soft delete (FR-06, CN-08)
+      responses: { '200': { description: OK } }
+  /properties/{id}/images:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    post:
+      tags: [Properties]
+      summary: Upload images (multipart field "images", ≤10 files, ≤5 MB each, JPG/PNG/WEBP)
+      requestBody:
+        content:
+          multipart/form-data:
+            schema: { type: object, properties: { images: { type: array, items: { type: string, format: binary } } } }
+      responses: { '200': { description: Updated property }, '413': { description: FILE_TOO_LARGE }, '415': { description: UNSUPPORTED_FILE_TYPE } }
+  /properties/{id}/images/{imageId}:
+    delete:
+      tags: [Properties]
+      summary: Remove an image
+      parameters: [{ $ref: '#/components/parameters/id' }, { name: imageId, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { description: OK } }
+  /properties/{id}/contact:
+    get:
+      tags: [Properties]
+      summary: Owner contact for Call / WhatsApp buttons (FR-25, signed-in only)
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: OK, content: { application/json: { schema: { type: object, properties: { data: { $ref: '#/components/schemas/ContactInfo' } } } } } }, '401': { description: Visitor } }
+  /properties/{id}/favorite:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    post: { tags: [Properties], summary: Add to wishlist, responses: { '200': { description: OK } } }
+    delete: { tags: [Properties], summary: Remove from wishlist, responses: { '200': { description: OK } } }
+
+  /tenders:
+    get:
+      tags: [Tenders]
+      summary: Browse tenders (project_owner, contractor, admin — hidden from individual users, NFR-04)
+      parameters:
+        - $ref: '#/components/parameters/page'
+        - $ref: '#/components/parameters/limit'
+        - { name: status, in: query, schema: { type: string, default: open } }
+        - { name: tenderType, in: query, schema: { type: string, enum: [construction, finishing, partnership] } }
+        - { name: city, in: query, schema: { type: string } }
+        - { name: q, in: query, schema: { type: string } }
+        - { name: sort, in: query, schema: { type: string, enum: [newest, deadline] } }
+      responses: { '200': { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/Tender' } }, meta: { $ref: '#/components/schemas/PageMeta' } } } } } } }
+    post:
+      tags: [Tenders]
+      summary: Create a tender as draft (project_owner, FR-10)
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/TenderInput' } } } }
+      responses: { '201': { description: Created (status=draft) }, '400': { description: 'WEIGHTS_INVALID (details.suggestion) / DEADLINE_INVALID' } }
+  /tenders/mine:
+    get:
+      tags: [Tenders]
+      summary: My tenders (project_owner) — all statuses
+      parameters: [{ $ref: '#/components/parameters/page' }, { $ref: '#/components/parameters/limit' }, { name: status, in: query, schema: { type: string } }]
+      responses: { '200': { description: OK } }
+  /tenders/{id}:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    get:
+      tags: [Tenders]
+      summary: Tender details (contractor gets myBid / canBid; records the view)
+      responses: { '200': { description: OK, content: { application/json: { schema: { type: object, properties: { data: { $ref: '#/components/schemas/Tender' } } } } } } }
+    patch:
+      tags: [Tenders]
+      summary: Edit (draft — all fields; open — text fields, weights only while no bids exist, BR-08)
+      requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/TenderInput' } } } }
+      responses: { '200': { description: OK }, '409': { description: 'WEIGHTS_FROZEN / TENDER_LOCKED / USE_EXTEND' } }
+  /tenders/{id}/publish:
+    post:
+      tags: [Tenders]
+      summary: draft → open (requires a spec book)
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: OK }, '400': { description: DOCUMENT_REQUIRED } }
+  /tenders/{id}/extend:
+    post:
+      tags: [Tenders]
+      summary: Extend the deadline once, never shorter (FR-14, TC-04)
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody: { content: { application/json: { schema: { type: object, properties: { deadline: { type: string, format: date-time } } } } } }
+      responses: { '200': { description: OK }, '400': { description: EXTENSION_INVALID }, '409': { description: EXTENSION_ALREADY_USED } }
+  /tenders/{id}/cancel:
+    post:
+      tags: [Tenders]
+      summary: Cancel before award
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody: { content: { application/json: { schema: { type: object, properties: { reason: { type: string } } } } } }
+      responses: { '200': { description: OK } }
+  /tenders/{id}/documents:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    get:
+      tags: [Tenders]
+      summary: All spec-book versions, newest first (FR-15)
+      responses: { '200': { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/TenderDocument' } } } } } } } }
+    post:
+      tags: [Tenders]
+      summary: Upload a new spec-book version (PDF/Word ≤ 20 MB). Either multipart "file" or JSON {uploadId} from a completed resumable upload.
+      requestBody:
+        content:
+          multipart/form-data:
+            schema: { type: object, properties: { file: { type: string, format: binary }, note: { type: string } } }
+          application/json:
+            schema: { type: object, properties: { uploadId: { type: string }, note: { type: string } } }
+      responses: { '201': { description: Created }, '413': { description: 'FILE_TOO_LARGE (TC-11)' }, '415': { description: UNSUPPORTED_FILE_TYPE } }
+  /tenders/{id}/documents/latest/download:
+    get:
+      tags: [Tenders]
+      summary: Download the latest spec book (decrypted stream)
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: File, content: { application/octet-stream: {} } } }
+  /tenders/{id}/documents/{version}/download:
+    get:
+      tags: [Tenders]
+      summary: Download a specific version
+      parameters: [{ $ref: '#/components/parameters/id' }, { name: version, in: path, required: true, schema: { type: integer } }]
+      responses: { '200': { description: File } }
+  /tenders/{id}/bids:
+    parameters: [{ $ref: '#/components/parameters/id' }]
+    post:
+      tags: [Bids]
+      summary: Submit a bid (verified contractor only — BR-09; before server deadline — BR-11)
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/BidInput' } } } }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { type: object, properties: { data: { $ref: '#/components/schemas/Bid' } } } } } }
+        '403': { description: 'CONTRACTOR_NOT_VERIFIED (details.redirect = "verification") — TC-01' }
+        '409': { description: 'TENDER_CLOSED (TC-02) / BID_EXISTS' }
+    get:
+      tags: [Bids]
+      summary: All bids of a tender (owner/admin; contents visible only after closing)
+      responses: { '200': { description: '{ visible, activeBidsCount, items[] }' } }
+  /tenders/{id}/shortlist:
+    get:
+      tags: [Tenders]
+      summary: Top-5 WSM shortlist with scores and engine label (FR-18, FR-19)
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: OK, content: { application/json: { schema: { type: object, properties: { data: { $ref: '#/components/schemas/Shortlist' } } } } } }, '403': { description: 'Not your tender (TC-08)' }, '409': { description: SHORTLIST_NOT_READY } }
+  /tenders/{id}/award:
+    post:
+      tags: [Tenders]
+      summary: Award to a shortlisted bid — final (FR-20, BR-18, TC-13)
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, properties: { bidId: { type: string } } } } } }
+      responses: { '200': { description: OK }, '400': { description: BID_NOT_SHORTLISTED }, '409': { description: TENDER_ALREADY_AWARDED } }
+
+  /bids/mine:
+    get:
+      tags: [Bids]
+      summary: My bids (contractor)
+      parameters: [{ $ref: '#/components/parameters/page' }, { $ref: '#/components/parameters/limit' }, { name: includeWithdrawn, in: query, schema: { type: boolean } }]
+      responses: { '200': { description: OK } }
+  /bids/{id}:
+    patch:
+      tags: [Bids]
+      summary: Modify my bid before closing
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody: { content: { application/json: { schema: { $ref: '#/components/schemas/BidInput' } } } }
+      responses: { '200': { description: OK }, '409': { description: TENDER_CLOSED } }
+  /bids/{id}/withdraw:
+    post:
+      tags: [Bids]
+      summary: Withdraw before closing — record kept (FR-16, BR-15)
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: OK }, '409': { description: TENDER_CLOSED } }
+
+  /uploads:
+    post:
+      tags: [Uploads]
+      summary: Start a resumable upload session (project_owner)
+      requestBody: { content: { application/json: { schema: { type: object, properties: { fileName: { type: string }, mimeType: { type: string, example: application/pdf }, totalSize: { type: integer }, chunkSize: { type: integer, example: 1048576 } } } } } }
+      responses: { '201': { description: OK, content: { application/json: { schema: { type: object, properties: { data: { $ref: '#/components/schemas/UploadSession' } } } } } } }
+  /uploads/{id}:
+    get:
+      tags: [Uploads]
+      summary: Session status — missingChunks tells the client what to resend after a disconnect
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: OK } }
+  /uploads/{id}/chunks/{index}:
+    put:
+      tags: [Uploads]
+      summary: Upload one chunk (raw application/octet-stream body, or multipart field "chunk")
+      parameters: [{ $ref: '#/components/parameters/id' }, { name: index, in: path, required: true, schema: { type: integer } }]
+      requestBody: { content: { application/octet-stream: { schema: { type: string, format: binary } } } }
+      responses: { '200': { description: OK } }
+
+  /verification:
+    post:
+      tags: [Verification]
+      summary: Submit verification documents (contractor). Fields engineers_syndicate / commercial_register / other — PDF or image ≤ 10 MB, stored encrypted.
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                engineers_syndicate: { type: string, format: binary }
+                commercial_register: { type: string, format: binary }
+                other: { type: string, format: binary }
+                notes: { type: string }
+      responses: { '201': { description: OK }, '409': { description: 'VERIFICATION_PENDING / ALREADY_VERIFIED' } }
+  /verification/me:
+    get:
+      tags: [Verification]
+      summary: My verification status and latest request
+      responses: { '200': { description: OK } }
+
+  /notifications:
+    get:
+      tags: [Notifications]
+      summary: My notifications (meta.unread = unread count)
+      parameters: [{ $ref: '#/components/parameters/page' }, { $ref: '#/components/parameters/limit' }, { name: unreadOnly, in: query, schema: { type: boolean } }]
+      responses: { '200': { description: OK, content: { application/json: { schema: { type: object, properties: { data: { type: array, items: { $ref: '#/components/schemas/Notification' } } } } } } } }
+  /notifications/unread-count:
+    get: { tags: [Notifications], summary: Badge count, responses: { '200': { description: OK } } }
+  /notifications/read-all:
+    post: { tags: [Notifications], summary: Mark all as read, responses: { '200': { description: OK } } }
+  /notifications/{id}/read:
+    post:
+      tags: [Notifications]
+      summary: Mark one as read
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: OK } }
+
+  /admin/stats:
+    get: { tags: [Admin], summary: Aggregate indicators only (FR-28), responses: { '200': { description: OK } } }
+  /admin/review-queue:
+    get:
+      tags: [Admin]
+      summary: Newest listings / tenders to review (FR-27)
+      parameters: [{ $ref: '#/components/parameters/page' }, { $ref: '#/components/parameters/limit' }, { name: type, in: query, schema: { type: string, enum: [property, tender] } }, { name: status, in: query, schema: { type: string, enum: [active, hidden, deleted] } }]
+      responses: { '200': { description: OK } }
+  /admin/properties/{id}/moderate:
+    post:
+      tags: [Admin]
+      summary: Hide / delete / restore a listing with a reason; owner is notified (FR-27, TC-10)
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ModerateRequest' } } } }
+      responses: { '200': { description: OK } }
+  /admin/properties/{id}/moderation-history:
+    get: { tags: [Admin], parameters: [{ $ref: '#/components/parameters/id' }], summary: Audit trail, responses: { '200': { description: OK } } }
+  /admin/tenders/{id}/moderate:
+    post:
+      tags: [Admin]
+      summary: Hide / delete / restore a tender with a reason
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ModerateRequest' } } } }
+      responses: { '200': { description: OK } }
+  /admin/tenders/{id}/moderation-history:
+    get: { tags: [Admin], parameters: [{ $ref: '#/components/parameters/id' }], summary: Audit trail, responses: { '200': { description: OK } } }
+  /admin/users:
+    get:
+      tags: [Admin]
+      summary: List users
+      parameters: [{ $ref: '#/components/parameters/page' }, { $ref: '#/components/parameters/limit' }, { name: role, in: query, schema: { type: string } }, { name: status, in: query, schema: { type: string } }, { name: q, in: query, schema: { type: string } }]
+      responses: { '200': { description: OK } }
+  /admin/users/{id}:
+    get:
+      tags: [Admin]
+      summary: Account details — counts, latest verification, decision history, recent login attempts
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      responses: { '200': { description: OK } }
+  /admin/users/{id}/{action}:
+    post:
+      tags: [Admin]
+      summary: |
+        Change account status — the ONLY way an account gains privileges (used by the web dashboard).
+        approve (pending|rejected → active) · reject (pending → rejected, reason required) ·
+        suspend (active|pending → suspended, reason required) · reactivate (suspended → active)
+      parameters:
+        - $ref: '#/components/parameters/id'
+        - { name: action, in: path, required: true, schema: { type: string, enum: [approve, reject, suspend, reactivate] } }
+      requestBody: { content: { application/json: { schema: { type: object, properties: { reason: { type: string } } } } } }
+      responses: { '200': { description: Updated user }, '400': { description: REASON_REQUIRED }, '409': { description: INVALID_TRANSITION } }
+  /admin/users/{id}/role:
+    post:
+      tags: [Admin]
+      summary: Change role (never to/from admin); revokes sessions so the new role takes effect
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody: { content: { application/json: { schema: { type: object, properties: { role: { type: string, enum: [user, property_owner, project_owner, contractor] }, reason: { type: string } } } } } }
+      responses: { '200': { description: OK } }
+  /admin/users/{id}/status:
+    post:
+      tags: [Admin]
+      summary: Suspend / reactivate an account
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody: { content: { application/json: { schema: { type: object, properties: { suspend: { type: boolean }, reason: { type: string } } } } } }
+      responses: { '200': { description: OK } }
+  /admin/verifications:
+    get:
+      tags: [Admin]
+      summary: Verification requests (oldest first)
+      parameters: [{ $ref: '#/components/parameters/page' }, { $ref: '#/components/parameters/limit' }, { name: status, in: query, schema: { type: string, enum: [pending, approved, rejected] } }]
+      responses: { '200': { description: OK } }
+  /admin/verifications/{id}:
+    get: { tags: [Admin], parameters: [{ $ref: '#/components/parameters/id' }], summary: Request details, responses: { '200': { description: OK } } }
+  /admin/verifications/{id}/documents/{docId}:
+    get:
+      tags: [Admin]
+      summary: View an uploaded document (decrypted)
+      parameters: [{ $ref: '#/components/parameters/id' }, { name: docId, in: path, required: true, schema: { type: string } }]
+      responses: { '200': { description: File } }
+  /admin/verifications/{id}/decision:
+    post:
+      tags: [Admin]
+      summary: Approve or reject (reason mandatory on reject) — manual only (FR-24, BR-10)
+      parameters: [{ $ref: '#/components/parameters/id' }]
+      requestBody: { content: { application/json: { schema: { type: object, properties: { decision: { type: string, enum: [approve, reject] }, reason: { type: string } } } } } }
+      responses: { '200': { description: OK }, '400': { description: REASON_REQUIRED }, '409': { description: ALREADY_REVIEWED } }

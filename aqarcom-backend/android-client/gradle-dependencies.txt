@@ -1,0 +1,16 @@
+// app/build.gradle  →  dependencies { ... }
+implementation 'com.squareup.retrofit2:retrofit:2.11.0'
+implementation 'com.squareup.retrofit2:converter-gson:2.11.0'
+implementation 'com.squareup.okhttp3:okhttp:4.12.0'
+implementation 'com.squareup.okhttp3:logging-interceptor:4.12.0'
+implementation 'com.google.code.gson:gson:2.11.0'
+
+// Optional — push notifications (FR-21, FR-26). Also add the google-services plugin + google-services.json
+implementation platform('com.google.firebase:firebase-bom:33.5.1')
+implementation 'com.google.firebase:firebase-messaging'
+
+// Java 8+ APIs
+compileOptions {
+    sourceCompatibility JavaVersion.VERSION_17
+    targetCompatibility JavaVersion.VERSION_17
+}
