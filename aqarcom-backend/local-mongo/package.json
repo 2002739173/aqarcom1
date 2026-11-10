@@ -1,0 +1,7 @@
+{
+  "name": "aqarcom-local-mongo",
+  "private": true,
+  "description": "Portable MongoDB for local development (no admin install needed)",
+  "scripts": { "start": "node start-mongo.js" },
+  "dependencies": { "mongodb-memory-server-core": "10.1.4" }
+}
