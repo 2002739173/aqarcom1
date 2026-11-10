@@ -1,4 +1,3 @@
 node_modules/
-bin/
-data/
-*.log
+# MongoDB journal: preallocated 100MB files, exceed GitHub limit and are recreated on start
+data/journal/

@@ -5,7 +5,3 @@ server/tests/.storage/
 scoring-service/.venv/
 __pycache__/
 *.pyc
-
-# local logs
-*-log.txt
-*.log

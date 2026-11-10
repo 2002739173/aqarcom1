@@ -1,0 +1,29 @@
+[2026-11-06T05:40:58.529Z] node v26.13.0
+[2026-11-06T05:40:58.544Z] MongoDB not running - starting portable MongoDB
+[2026-11-06T05:40:58.545Z] installing portable MongoDB launcher (npm install in local-mongo)
+
+added 49 packages in 18s
+[2026-11-06T05:41:18.252Z] waiting for MongoDB (first run downloads ~100 MB)...
+[2026-11-06T05:46:16.321Z] MongoDB is up on 27017
+[2026-11-06T05:46:16.325Z] seeding demo data into the new database (npm run seed)
+
+> aqarcom-server@1.0.0 seed
+> node src/scripts/seed.js
+
+[2026-11-06T05:46:22.974Z] INFO  MongoDB connected: 127.0.0.1/aqarcom
+
+✔ Seed complete. Demo accounts (password: Passw0rd!):
+┌─────────┬─────────────────────────────────┬────────────────────────────────────────────────┐
+│ (index) │ role                            │ email                                          │
+├─────────┼─────────────────────────────────┼────────────────────────────────────────────────┤
+│ 0       │ 'admin'                         │ 'admin@aqarcom.app'                            │
+│ 1       │ 'user'                          │ 'user@aqarcom.app'                             │
+│ 2       │ 'property_owner'                │ 'owner@aqarcom.app'                            │
+│ 3       │ 'project_owner'                 │ 'project@aqarcom.app'                          │
+│ 4       │ 'contractor (verified)'         │ 'contractor1..3@aqarcom.app'                   │
+│ 5       │ 'contractor (pending approval)' │ 'contractor4@aqarcom.app'                      │
+│ 6       │ 'pending accounts'              │ 'pending.owner@ / pending.project@aqarcom.app' │
+└─────────┴─────────────────────────────────┴────────────────────────────────────────────────┘
+[2026-11-06T05:46:24.411Z] WARN  push dispatch error: Operation interrupted because client was closed
+[2026-11-06T05:46:24.502Z] seed done
+[2026-11-06T05:46:24.504Z] starting API server (npm start) - output also in server/server-log.txt

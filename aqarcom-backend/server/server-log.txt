@@ -1,0 +1,18 @@
+
+> aqarcom-server@1.0.0 start
+> node src/server.js
+
+[2026-11-06T05:46:34.462Z] INFO  MongoDB connected: 127.0.0.1/aqarcom
+[2026-11-06T05:46:34.586Z] INFO  Tender scheduler started (* * * * *)
+[2026-11-06T05:46:34.587Z] INFO  AqarCom API listening on :3000  —  docs: http://10.0.2.2:3000/api-docs
+[0mPOST /api/v1/auth/register [33m400[0m 101.843 ms - 188[0m
+[0mPOST /api/v1/auth/register [32m201[0m 325.381 ms - 719[0m
+[2026-11-06T05:49:00.098Z] WARN  Scoring service unavailable (ECONNREFUSED) — using fallback evaluator
+[2026-11-06T05:49:00.126Z] INFO  scheduler: closed=1 recovered=0
+[0mGET /api/v1/properties?city=%D8%AF%D9%85%D8%B4%D9%82&purpose=sale&minPrice=1000&maxPrice=500000&sort=price_asc&page=1&limit=10 [32m200[0m 52.412 ms - -[0m
+[0mGET /api/v1/properties/map?swLat=33.4&swLng=36.1&neLat=33.6&neLng=36.4&limit=200 [32m200[0m 8.849 ms - -[0m
+[0mGET /api/v1/properties/mine?status=active [33m401[0m 1.411 ms - 102[0m
+[0mGET /api/v1/properties/%7B%7BpropertyId%7D%7D [33m400[0m 5.792 ms - 127[0m
+[0mGET /api/v1/properties/6aed69b07f92556271839bbf [32m200[0m 19.020 ms - 846[0m
+[0mGET /api/v1/notifications?page=1&limit=20 [33m401[0m 0.692 ms - 102[0m
+^C
